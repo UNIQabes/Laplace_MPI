@@ -145,15 +145,17 @@ int main(int argc, char *argv[])
 			yup_edge[localx - 1] = u_new[localx][gridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
-		MPI_Irecv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &req_yup);
-		MPI_Irecv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &req_ydown);
-		MPI_Irecv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XUP, comm2d, &req_xup);
-		MPI_Irecv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XDOWN, comm2d, &req_xdown);
 
-		MPI_Send(yup_edge, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YDOWN, comm2d);
-		MPI_Send(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YUP, comm2d);
-		MPI_Send(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XDOWN, comm2d);
-		MPI_Send(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XUP, comm2d);
+		MPI_Isend(yup_edge, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YDOWN, comm2d, &req_yup);
+		MPI_Isend(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YUP, comm2d, &req_ydown);
+		MPI_Isend(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XDOWN, comm2d, &req_xup);
+		MPI_Isend(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XUP, comm2d, &req_xdown);
+
+		MPI_Status status_xup, status_xdown, status_yup, status_ydown;
+		MPI_Recv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &status_yup);
+		MPI_Recv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &status_ydown);
+		MPI_Recv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XUP, comm2d, &status_xup);
+		MPI_Recv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XDOWN, comm2d, &status_xdown);
 
 		MPI_Wait(&req_xup, &status_xup);
 		MPI_Wait(&req_xdown, &status_xdown);
