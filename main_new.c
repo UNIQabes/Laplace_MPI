@@ -11,8 +11,10 @@
 #define PI 3.1415927
 #define NITER 10000
 
-#define TAG_1 100
-#define TAG_2 101
+#define TAG_FROM_XUP 800
+#define TAG_FROM_XDOWN 801
+#define TAG_FROM_YUP 810
+#define TAG_FROM_YDOWN 811
 #ifndef FALSE
 #define FALSE 0
 #endif
@@ -136,15 +138,15 @@ int main(int argc, char *argv[])
 			yup_edge[localx - 1] = u_new[localx][gridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
-		MPI_Irecv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, 0, comm2d, &req_yup);
-		MPI_Irecv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, 0, comm2d, &req_ydown);
-		MPI_Irecv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, 0, comm2d, &req_xup);
-		MPI_Irecv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, 0, comm2d, &req_xdown);
+		MPI_Irecv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &req_yup);
+		MPI_Irecv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &req_ydown);
+		MPI_Irecv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XUP, comm2d, &req_xup);
+		MPI_Irecv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XDOWN, comm2d, &req_xdown);
 
-		MPI_Send(yup_edge, localGridSize_x, MPI_DOUBLE, yup, 0, comm2d);
-		MPI_Send(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, 0, comm2d);
-		MPI_Send(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, 0, comm2d);
-		MPI_Send(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, 0, comm2d);
+		MPI_Send(yup_edge, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YDOWN, comm2d);
+		MPI_Send(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YUP, comm2d);
+		MPI_Send(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XDOWN, comm2d);
+		MPI_Send(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XUP, comm2d);
 		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
 			u_new[localx][localGridSize_y + 1] = yup_surr[localx - 1];
