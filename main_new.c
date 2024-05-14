@@ -75,17 +75,17 @@ int main(int argc, char *argv[])
 	// uoldとunewのメモリ領域確保 + u_oldの初期化 ----------------------------
 	//  u_oldとu_newは自分の担当領域+その隣接領域の値を保持する。
 	//  xの範囲は gridSize_x*gridPos_?-1 <= x <= gridSize_x*(gridPos_x+1) yの範囲も同様
-	double **u_old = (double **)malloc(sizeof(double *) * (gridSize_x + 2));
-	double **u_new = (double **)malloc(sizeof(double *) * (gridSize_x + 2));
+	double **u_old = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
+	double **u_new = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
 
-	for (int localx = 0; localx <= gridSize_x + 1; localx++)
+	for (int localx = 0; localx <= localGridSize_x + 1; localx++)
 	{
-		u_old[localx] = (double *)malloc(sizeof(double) * (gridSize_y + 2));
-		u_new[localx] = (double *)malloc(sizeof(double) * (gridSize_y + 2));
+		u_old[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
+		u_new[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
 
 		int worldx = localx - 1 + gridSize_x * (gridPos_x);
 
-		for (int localy = 0; localy <= gridSize_y + 1; localy++)
+		for (int localy = 0; localy <= localGridSize_y + 1; localy++)
 		{
 			int worldy = localy - 1 + gridSize_y * (gridPos_y);
 			if (worldx < 0 || worldy < 0 || XSIZE - 1 < worldx || YSIZE - 1 < worldy)
@@ -111,43 +111,43 @@ int main(int argc, char *argv[])
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
 
 	// 担当領域の一番端(edge)
-	double *yup_edge = (double *)malloc(sizeof(double) * gridSize_x);
-	double *ydown_edge = (double *)malloc(sizeof(double) * gridSize_x);
+	double *yup_edge = (double *)malloc(sizeof(double) * localGridSize_x);
+	double *ydown_edge = (double *)malloc(sizeof(double) * localGridSize_x);
 
 	// 隣接領域(edgeのさらに1つ外側)
-	double *yup_surr = (double *)malloc(sizeof(double) * gridSize_x);
-	double *ydown_surr = (double *)malloc(sizeof(double) * gridSize_x);
+	double *yup_surr = (double *)malloc(sizeof(double) * localGridSize_x);
+	double *ydown_surr = (double *)malloc(sizeof(double) * localGridSize_x);
 
 	int i = 0;
 	for (i = 0; i < NITER; i++)
 	{
 		// 担当領域の値を計算
-		for (int localx = 1; localx <= gridSize_x; localx++)
+		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
-			for (int localy = 1; localy <= gridSize_y; localy++)
+			for (int localy = 1; localy <= localGridSize_y; localy++)
 			{
 				u_new[localx][localy] = 0.25f * (u_old[localx - 1][localy - 1] + u_old[localx - 1][localy + 1] + u_old[localx + 1][localy - 1] + u_old[localx + 1][localy + 1]);
 			}
 		}
 
 		// 周辺領域を同期
-		for (int localx = 1; localx <= gridSize_x; localx++)
+		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
 			yup_edge[localx - 1] = u_new[localx][gridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
-		MPI_Irecv(yup_surr, gridSize_x, MPI_DOUBLE, yup, 0, comm2d, &req_yup);
-		MPI_Irecv(ydown_surr, gridSize_x, MPI_DOUBLE, ydown, 0, comm2d, &req_ydown);
-		MPI_Irecv(&(u_new[gridSize_x + 1][1]), gridSize_y, MPI_DOUBLE, xup, 0, comm2d, &req_xup);
-		MPI_Irecv(&(u_new[0][1]), gridSize_y, MPI_DOUBLE, xdown, 0, comm2d, &req_xdown);
+		MPI_Irecv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, 0, comm2d, &req_yup);
+		MPI_Irecv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, 0, comm2d, &req_ydown);
+		MPI_Irecv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, 0, comm2d, &req_xup);
+		MPI_Irecv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, 0, comm2d, &req_xdown);
 
-		MPI_Send(yup_edge, gridSize_x, MPI_DOUBLE, yup, 0, comm2d);
-		MPI_Send(ydown_edge, gridSize_x, MPI_DOUBLE, ydown, 0, comm2d);
-		MPI_Send(&(u_new[gridSize_x][1]), gridSize_y, MPI_DOUBLE, xup, 0, comm2d);
-		MPI_Send(&(u_new[1][1]), YSIZE, gridSize_y, xdown, 0, comm2d);
-		for (int localx = 1; localx <= gridSize_x; localx++)
+		MPI_Send(yup_edge, localGridSize_x, MPI_DOUBLE, yup, 0, comm2d);
+		MPI_Send(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, 0, comm2d);
+		MPI_Send(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, 0, comm2d);
+		MPI_Send(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, 0, comm2d);
+		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
-			u_new[localx][gridSize_y + 1] = yup_surr[localx - 1];
+			u_new[localx][localGridSize_y + 1] = yup_surr[localx - 1];
 			u_new[localx][0] = ydown_surr[localx - 1];
 		}
 
@@ -158,9 +158,9 @@ int main(int argc, char *argv[])
 
 	// 総和を求める
 	double localsum = 0;
-	for (int localx = 1; localx <= gridSize_x; localx++)
+	for (int localx = 1; localx <= localGridSize_x; localx++)
 	{
-		for (int localy = 1; localy <= gridSize_y; localy++)
+		for (int localy = 1; localy <= localGridSize_y; localy++)
 		{
 			localsum += u_old[localx][localy];
 		}
