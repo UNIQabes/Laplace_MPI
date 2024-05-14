@@ -46,16 +46,18 @@ int main(int argc, char *argv[])
 	{
 		if (numprocs % gridNum_x == 0)
 		{
-			gridNum_y = numprocs / gridNum_y;
+			gridNum_y = numprocs / gridNum_x;
 			break;
 		}
 	}
 	gridSize_x = XSIZE / gridNum_x;
 	gridSize_y = YSIZE / gridNum_y;
+	// printf("gridsize(%d,%d)\n", gridSize_x, gridSize_y);
 
 	MPI_Comm comm2d;
 	int periods[DIM] = {FALSE, FALSE};
-	MPI_Cart_create(MPI_COMM_WORLD, 1, &numprocs, periods, FALSE, &comm2d);
+	int dims[DIM] = {gridNum_x, gridNum_y};
+	MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, FALSE, &comm2d);
 
 	int coords[DIM];
 	int maxDim;
@@ -67,10 +69,10 @@ int main(int argc, char *argv[])
 	int xstart, xend, ystart, yend;
 	xstart = gridSize_x * gridPos_x;
 	xend = gridSize_x * (gridPos_x + 1);
-	xend = (xend >= XSIZE) ? XSIZE - 1 : xend;
+	xend = (xend >= XSIZE) ? XSIZE : xend;
 	ystart = gridSize_y * gridPos_y;
 	yend = gridSize_y * (gridPos_y + 1);
-	yend = (yend >= YSIZE) ? YSIZE - 1 : yend;
+	yend = (yend >= YSIZE) ? YSIZE : yend;
 	int localGridSize_x = xend - xstart;
 	int localGridSize_y = yend - ystart;
 
@@ -82,6 +84,8 @@ int main(int argc, char *argv[])
 
 	for (int localx = 0; localx <= localGridSize_x + 1; localx++)
 	{
+		// printf("%d\n", localx);
+
 		u_old[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
 		u_new[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
 
@@ -101,8 +105,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// laplaceを解く-----------------------------------
-	MPI_Barrier(comm2d);
+	// laplaceを解く--------------------------------------------------------
+	MPI_Barrier(MPI_COMM_WORLD);
 	double start = MPI_Wtime();
 
 	int xdown, xup, ydown, yup;
@@ -110,7 +114,10 @@ int main(int argc, char *argv[])
 	MPI_Cart_shift(comm2d, 0, 1, &xdown, &xup);
 	MPI_Cart_shift(comm2d, 1, 1, &ydown, &yup);
 
+	// printf("rank:%d pos(%d,%d) gridsize(%d,%d) xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y, xup, xdown, yup, ydown);
+
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
+	MPI_Status status_xup, status_xdown, status_yup, status_ydown;
 
 	// 担当領域の一番端(edge)
 	double *yup_edge = (double *)malloc(sizeof(double) * localGridSize_x);
@@ -120,17 +127,17 @@ int main(int argc, char *argv[])
 	double *yup_surr = (double *)malloc(sizeof(double) * localGridSize_x);
 	double *ydown_surr = (double *)malloc(sizeof(double) * localGridSize_x);
 
-	int i = 0;
-	for (i = 0; i < NITER; i++)
+	for (int i = 0; i < NITER; i++)
 	{
 		// 担当領域の値を計算
 		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
 			for (int localy = 1; localy <= localGridSize_y; localy++)
 			{
-				u_new[localx][localy] = 0.25f * (u_old[localx - 1][localy - 1] + u_old[localx - 1][localy + 1] + u_old[localx + 1][localy - 1] + u_old[localx + 1][localy + 1]);
+				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy - 1] + u_old[localx - 1][localy + 1] + u_old[localx + 1][localy - 1] + u_old[localx + 1][localy + 1]);
 			}
 		}
+		// printf("rank:%d  i:%d\n", myrank, i);
 
 		// 周辺領域を同期
 		for (int localx = 1; localx <= localGridSize_x; localx++)
@@ -147,10 +154,16 @@ int main(int argc, char *argv[])
 		MPI_Send(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YUP, comm2d);
 		MPI_Send(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XDOWN, comm2d);
 		MPI_Send(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XUP, comm2d);
+
+		MPI_Wait(&req_xup, &status_xup);
+		MPI_Wait(&req_xdown, &status_xdown);
+		MPI_Wait(&req_yup, &status_yup);
+		MPI_Wait(&req_ydown, &status_ydown);
+
 		for (int localx = 1; localx <= localGridSize_x; localx++)
 		{
-			u_new[localx][localGridSize_y + 1] = yup_surr[localx - 1];
-			u_new[localx][0] = ydown_surr[localx - 1];
+			u_new[localx][localGridSize_y + 1] = (yup != MPI_PROC_NULL) ? yup_surr[localx - 1] : 0;
+			u_new[localx][0] = (ydown != MPI_PROC_NULL) ? ydown_surr[localx - 1] : 0;
 		}
 
 		double **temp = u_old;
@@ -164,7 +177,7 @@ int main(int argc, char *argv[])
 	{
 		for (int localy = 1; localy <= localGridSize_y; localy++)
 		{
-			localsum += u_old[localx][localy];
+			localsum += u_old[localx][localy] - u_new[localx][localy];
 		}
 	}
 	double sum = -100;
@@ -173,15 +186,16 @@ int main(int argc, char *argv[])
 	{
 		printf("sum = %g\n", sum);
 	}
-	MPI_Comm_free(comm2d);
 
-	MPI_Barrier(comm2d);
+	MPI_Comm_free(&comm2d);
+
+	MPI_Barrier(MPI_COMM_WORLD);
 	double end = MPI_Wtime();
 	if (myrank == 0)
 	{
 		printf("time = %g\n", end - start);
 	}
-	MPI_Finalize();
 
+	MPI_Finalize();
 	return (0);
 }
