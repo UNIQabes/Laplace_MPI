@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
 	int gridSize_x;
 	int gridSize_y;
 
+	//gridNum_x*gridNum_y=numprocsを満たす組み合わせの中で、gridNum_xとgridNum_yの差が最も小さくなるような組み合わせを探す。
 	gridNum_x = (int)(sqrtf(numprocs) + 1);
 	for (gridNum_x = (int)(sqrtf(numprocs) + 1); gridNum_x >= 1; gridNum_x--)
 	{
@@ -55,22 +56,27 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+	//グリッドの分割数から、グリッドの1辺の長さを求める
 	gridSize_x = XSIZE / gridNum_x;
 	gridSize_y = YSIZE / gridNum_y;
-	// printf("gridsize(%d,%d)\n", gridSize_x, gridSize_y);
 
+	//2次元のキューブのトポロジーを持つコミュニケータを作成
 	MPI_Comm comm2d;
 	int periods[DIM] = {FALSE, FALSE};
 	int dims[DIM] = {gridNum_x, gridNum_y};
 	MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, FALSE, &comm2d);
 
+
+	//自プロセスがトポロジーのどの位置に割り当てられているかを取得
 	int coords[DIM];
 	int maxDim;
 	MPI_Cart_coords(comm2d, myrank, 2, coords);
 	int gridPos_x = coords[0];
 	int gridPos_y = coords[1];
 
-	// 端のグリッドは、gridsize_x gridsize_yよりも担当領域が小さくなることがある。その大きさを求める
+	// x,yそれぞれのgridSizeの総和がXSIZE,YSIZEよりも大きくなる場合があるので、
+	//はみ出した分、端にあるグリッドの実際のgridSizeを小さくする。
+	//実際に担当するグリッドの大きさをlocalGridSizeに入れる
 	int xstart, xend, ystart, yend;
 	xstart = gridSize_x * gridPos_x;
 	xend = gridSize_x * (gridPos_x + 1);
@@ -83,30 +89,31 @@ int main(int argc, char *argv[])
 
 	// uoldとunewのメモリ領域確保 + u_oldの初期化 ----------------------------
 	//  u_oldとu_newは自分の担当領域+その隣接領域の値を保持する。
-	//  xの範囲は gridSize_x*gridPos_?-1 <= x <= gridSize_x*(gridPos_x+1) yの範囲も同様
+	//  担当するxの範囲は gridSize_x*gridPos_?-1 <= x <= gridSize_x*(gridPos_x+1) yの範囲も同様
 	double **u_old = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
 	double **u_new = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
 
-	
+	//localx,localyはu_old,u_newのインデックス
 	for (localx = 0; localx <= localGridSize_x + 1; localx++)
 	{
-		// printf("%d\n", localx);
 
 		u_old[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
 		u_new[localx] = (double *)malloc(sizeof(double) * (localGridSize_y + 2));
 
+		//worldx,worldyは分割される前の領域全体のインデックス
 		int worldx = localx - 1 + gridSize_x * (gridPos_x);
 
 		for (localy = 0; localy <= localGridSize_y + 1; localy++)
 		{
 			int worldy = localy - 1 + gridSize_y * (gridPos_y);
+			//領域全体の外側に当たる部分の値は0にする。
 			if (worldx < 0 || worldy < 0 || XSIZE - 1 < worldx || YSIZE - 1 < worldy)
 			{
 				u_old[localx][localy] = 0;
 			}
 			else
 			{
-				u_old[localx][localy] = sin(worldx / XSIZE * PI) + cos(worldy / YSIZE * PI);
+				u_old[localx][localy] = sin((double)worldx / XSIZE * PI) + cos((double)worldy / YSIZE * PI);
 			}
 		}
 	}
@@ -116,15 +123,17 @@ int main(int argc, char *argv[])
 	double start = MPI_Wtime();
 
 	int xdown, xup, ydown, yup;
-	/* calculate process ranks for 'down' and 'up' */
+	//上下左右で隣接するプロセスのランクを取得
 	MPI_Cart_shift(comm2d, 0, 1, &xdown, &xup);
 	MPI_Cart_shift(comm2d, 1, 1, &ydown, &yup);
 
-	// printf("rank:%d pos(%d,%d) gridsize(%d,%d) xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y, xup, xdown, yup, ydown);
+	fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y, xup, xdown, yup, ydown);
 
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
 	MPI_Status status_xup, status_xdown, status_yup, status_ydown;
 
+	//y方向の隣接領域を担当するプロセスとの通信に使うバッファを確保
+	//x方向はデータを格納している領域を使って直接データを送受信する
 	// 担当領域の一番端(edge)
 	double *yup_edge = (double *)malloc(sizeof(double) * localGridSize_x);
 	double *ydown_edge = (double *)malloc(sizeof(double) * localGridSize_x);
@@ -140,23 +149,27 @@ int main(int argc, char *argv[])
 		{
 			for (localy = 1; localy <= localGridSize_y; localy++)
 			{
-				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy - 1] + u_old[localx - 1][localy + 1] + u_old[localx + 1][localy - 1] + u_old[localx + 1][localy + 1]);
+				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy] + u_old[localx + 1][localy] + u_old[localx][localy - 1] + u_old[localx][localy + 1]);
 			}
 		}
 		// printf("rank:%d  i:%d\n", myrank, i);
 
-		// 周辺領域を同期
+		// 自分の担当領域の境界部分を隣接プロセスと同期
+		//y方向の隣接領域を担当するプロセスに送るデータをバッファに入れる
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
 			yup_edge[localx - 1] = u_new[localx][gridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
 
+		//2次元分割なので、上下左右のプロセスと同期する。
+		//端の領域を隣接プロセスに送信
 		MPI_Isend(yup_edge, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YDOWN, comm2d, &req_yup);
 		MPI_Isend(ydown_edge, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YUP, comm2d, &req_ydown);
 		MPI_Isend(&(u_new[localGridSize_x][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XDOWN, comm2d, &req_xup);
 		MPI_Isend(&(u_new[1][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XUP, comm2d, &req_xdown);
 
+		//隣接プロセスの端の領域をほかプロセスから受信
 		MPI_Status status_xup, status_xdown, status_yup, status_ydown;
 		MPI_Recv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &status_yup);
 		MPI_Recv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &status_ydown);
@@ -168,31 +181,32 @@ int main(int argc, char *argv[])
 		MPI_Wait(&req_yup, &status_yup);
 		MPI_Wait(&req_ydown, &status_ydown);
 
+		//y方向の隣接領域から送られてきたデータをu_newに代入していく。
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
 			u_new[localx][localGridSize_y + 1] = (yup != MPI_PROC_NULL) ? yup_surr[localx - 1] : 0;
 			u_new[localx][0] = (ydown != MPI_PROC_NULL) ? ydown_surr[localx - 1] : 0;
 		}
 
+		//データコピーの代わりに、書き込む領域を入れ替える
 		double **temp = u_old;
 		u_old = u_new;
 		u_new = temp;
 	}
 
-	// 総和を求める
 	double localsum = 0;
 	for (localx = 1; localx <= localGridSize_x; localx++)
 	{
 		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
-			localsum += u_old[localx][localy] - u_new[localx][localy];
+			localsum += u_new[localx][localy]-u_old[localx][localy];
 		}
 	}
 	double sum = -100;
 	MPI_Reduce(&localsum, &sum, 1, MPI_DOUBLE, MPI_SUM, 0, comm2d);
 	if (myrank == 0)
 	{
-		printf("sum = %g\n", sum);
+		fprintf(stderr,"sum = %g\n", sum);
 	}
 
 	MPI_Comm_free(&comm2d);
@@ -201,7 +215,8 @@ int main(int argc, char *argv[])
 	double end = MPI_Wtime();
 	if (myrank == 0)
 	{
-		printf("time = %g\n", end - start);
+		fprintf(stderr,"time = %g\n", end - start);
+		printf("%g", end - start);
 	}
 
 	MPI_Finalize();

@@ -101,7 +101,7 @@ void lap_solve(MPI_Comm comm)
 			sum += uu[x][y] - u[x][y];
 	MPI_Reduce(&sum, &t_sum, 1, MPI_DOUBLE, MPI_SUM, 0, comm1d);
 	if (myid == 0)
-		printf("sum = %g\n", t_sum);
+		fprintf(stderr,"sum = %g\n", t_sum);
 	MPI_Comm_free(&comm1d);
 }
 
@@ -122,7 +122,11 @@ int main(int argc, char *argv[])
 	MPI_Barrier(MPI_COMM_WORLD);
 	time2 = MPI_Wtime();
 	if (myid == 0)
-		printf("time = %g\n", time2 - time1);
+	{
+		fprintf(stderr,"time = %g\n", time2 - time1);
+		printf("%g", time2 - time1);
+	}
+		
 	MPI_Finalize();
 	return (0);
 }
