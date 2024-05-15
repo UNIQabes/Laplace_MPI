@@ -1,0 +1,8 @@
+#!/bin/zsh
+#SBATCH -p bdw2-mixed
+#SBATCH -N 1
+#SBATCH -o report/out_%J
+#SBATCH -e report/err_%J
+
+mpirun -map-by ppr:2:socket -cpus-per-proc 6 bin/main_new
+mpirun -map-by ppr:2:socket -cpus-per-proc 6 bin/main_old

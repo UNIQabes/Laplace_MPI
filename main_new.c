@@ -19,9 +19,14 @@
 #define FALSE 0
 #endif
 
+#define DIM 2
+
 int main(int argc, char *argv[])
 {
-	const int DIM = 2;
+	int localx,localy,i;
+
+
+
 
 	int namelen;
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
@@ -82,7 +87,8 @@ int main(int argc, char *argv[])
 	double **u_old = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
 	double **u_new = (double **)malloc(sizeof(double *) * (localGridSize_x + 2));
 
-	for (int localx = 0; localx <= localGridSize_x + 1; localx++)
+	
+	for (localx = 0; localx <= localGridSize_x + 1; localx++)
 	{
 		// printf("%d\n", localx);
 
@@ -91,7 +97,7 @@ int main(int argc, char *argv[])
 
 		int worldx = localx - 1 + gridSize_x * (gridPos_x);
 
-		for (int localy = 0; localy <= localGridSize_y + 1; localy++)
+		for (localy = 0; localy <= localGridSize_y + 1; localy++)
 		{
 			int worldy = localy - 1 + gridSize_y * (gridPos_y);
 			if (worldx < 0 || worldy < 0 || XSIZE - 1 < worldx || YSIZE - 1 < worldy)
@@ -127,12 +133,12 @@ int main(int argc, char *argv[])
 	double *yup_surr = (double *)malloc(sizeof(double) * localGridSize_x);
 	double *ydown_surr = (double *)malloc(sizeof(double) * localGridSize_x);
 
-	for (int i = 0; i < NITER; i++)
+	for (i = 0; i < NITER; i++)
 	{
 		// 担当領域の値を計算
-		for (int localx = 1; localx <= localGridSize_x; localx++)
+		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
-			for (int localy = 1; localy <= localGridSize_y; localy++)
+			for (localy = 1; localy <= localGridSize_y; localy++)
 			{
 				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy - 1] + u_old[localx - 1][localy + 1] + u_old[localx + 1][localy - 1] + u_old[localx + 1][localy + 1]);
 			}
@@ -140,7 +146,7 @@ int main(int argc, char *argv[])
 		// printf("rank:%d  i:%d\n", myrank, i);
 
 		// 周辺領域を同期
-		for (int localx = 1; localx <= localGridSize_x; localx++)
+		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
 			yup_edge[localx - 1] = u_new[localx][gridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
@@ -162,7 +168,7 @@ int main(int argc, char *argv[])
 		MPI_Wait(&req_yup, &status_yup);
 		MPI_Wait(&req_ydown, &status_ydown);
 
-		for (int localx = 1; localx <= localGridSize_x; localx++)
+		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
 			u_new[localx][localGridSize_y + 1] = (yup != MPI_PROC_NULL) ? yup_surr[localx - 1] : 0;
 			u_new[localx][0] = (ydown != MPI_PROC_NULL) ? ydown_surr[localx - 1] : 0;
@@ -175,9 +181,9 @@ int main(int argc, char *argv[])
 
 	// 総和を求める
 	double localsum = 0;
-	for (int localx = 1; localx <= localGridSize_x; localx++)
+	for (localx = 1; localx <= localGridSize_x; localx++)
 	{
-		for (int localy = 1; localy <= localGridSize_y; localy++)
+		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
 			localsum += u_old[localx][localy] - u_new[localx][localy];
 		}
