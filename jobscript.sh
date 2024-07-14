@@ -12,49 +12,11 @@ echo "old 2*2"
 
 
 
-echo "new 3*3"
-./echo_avetime.sh "mpirun -map-by ppr:9:socket --bind-to core -n 9 -report-bindings bin/main_new"
-
-echo "old 3*3"
-./echo_avetime.sh "mpirun -map-by ppr:9:socket --bind-to core -n 9 -report-bindings bin/main_old"
-
-
-
-
 echo "new 4*4"
 ./echo_avetime.sh "mpirun -map-by ppr:8:socket --bind-to core -n 16 -report-bindings bin/main_new"
 
 echo "old 4*4"
 ./echo_avetime.sh "mpirun -map-by ppr:8:socket --bind-to core -n 16 -report-bindings bin/main_old"
-
-
-
-
-echo "new 5*5"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 25 -report-bindings bin/main_new"
-
-echo "old 5*5"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 25 -report-bindings bin/main_old"
-
-
-
-
-echo "new 6*6"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 36 -report-bindings bin/main_new"
-
-echo "old 6*6"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 36 -report-bindings bin/main_old"
-
-
-
-
-echo "new 7*7"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 49 -report-bindings bin/main_new"
-
-echo "old 7*7"
-./echo_avetime.sh "mpirun -map-by ppr:13:socket --bind-to core -n 49 -report-bindings bin/main_old"
-
-
 
 
 

@@ -88,6 +88,7 @@ void lap_solve(MPI_Comm comm)
 				 up, TAG_1, comm1d);
 		MPI_Wait(&req1, &status1);
 		MPI_Wait(&req2, &status2);
+		
 		/* update */
 		for (x = x_start; x < x_end; x++)
 			for (y = 1; y < YSIZE + 1; y++)

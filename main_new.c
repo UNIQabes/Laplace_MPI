@@ -6,10 +6,18 @@
 #include <math.h>
 #include <mpi.h>
 /* square region */
-#define XSIZE 256
-#define YSIZE 256
 #define PI 3.1415927
-#define NITER 10000
+
+//#define XSIZE 256
+//#define YSIZE 256
+//#define NITER 10000
+
+
+#define XSIZE 64
+#define YSIZE 64
+#define NITER 10
+
+
 
 #define TAG_FROM_XUP 800
 #define TAG_FROM_XDOWN 801
@@ -23,6 +31,9 @@
 
 int main(int argc, char *argv[])
 {
+	int debugcount_cal=0;
+	int debugcount_ary=0;
+
 	int localx,localy,i;
 
 
@@ -35,7 +46,7 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 	MPI_Get_processor_name(processor_name, &namelen);
-	fprintf(stderr, "Process %d on %s\n", myrank, processor_name);
+	//fprintf(stderr, "Process %d on %s\n", myrank, processor_name);
 
 	// 各パラメーターの決定--------------------------------------
 	//  x,y軸方向に幾つ分割されているか
@@ -57,8 +68,8 @@ int main(int argc, char *argv[])
 		}
 	}
 	//グリッドの分割数から、グリッドの1辺の長さを求める
-	gridSize_x = XSIZE / gridNum_x;
-	gridSize_y = YSIZE / gridNum_y;
+	gridSize_x = (XSIZE+gridNum_x-1) / gridNum_x;
+	gridSize_y = (YSIZE+gridNum_y-1) / gridNum_y;
 
 	//2次元のキューブのトポロジーを持つコミュニケータを作成
 	MPI_Comm comm2d;
@@ -79,9 +90,11 @@ int main(int argc, char *argv[])
 	//実際に担当するグリッドの大きさをlocalGridSizeに入れる
 	int xstart, xend, ystart, yend;
 	xstart = gridSize_x * gridPos_x;
+	xstart=(xstart >= XSIZE) ? XSIZE : xstart;
 	xend = gridSize_x * (gridPos_x + 1);
 	xend = (xend >= XSIZE) ? XSIZE : xend;
 	ystart = gridSize_y * gridPos_y;
+	ystart = (ystart >= YSIZE) ? YSIZE : ystart;
 	yend = gridSize_y * (gridPos_y + 1);
 	yend = (yend >= YSIZE) ? YSIZE : yend;
 	int localGridSize_x = xend - xstart;
@@ -110,6 +123,7 @@ int main(int argc, char *argv[])
 			if (worldx < 0 || worldy < 0 || XSIZE - 1 < worldx || YSIZE - 1 < worldy)
 			{
 				u_old[localx][localy] = 0;
+				u_new[localx][localy] = 0;
 			}
 			else
 			{
@@ -127,10 +141,13 @@ int main(int argc, char *argv[])
 	MPI_Cart_shift(comm2d, 0, 1, &xdown, &xup);
 	MPI_Cart_shift(comm2d, 1, 1, &ydown, &yup);
 
-	fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y, xup, xdown, yup, ydown);
+	//debug
+	//fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xstart,xend,ystart,yend, xup, xdown, yup, ydown);
+	MPI_Barrier(comm2d);
 
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
 	MPI_Status status_xup, status_xdown, status_yup, status_ydown;
+	MPI_Status status_toxup, status_toxdown, status_toyup, status_toydown;
 
 	//y方向の隣接領域を担当するプロセスとの通信に使うバッファを確保
 	//x方向はデータを格納している領域を使って直接データを送受信する
@@ -144,12 +161,28 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < NITER; i++)
 	{
+		for (localx = 0; localx <= localGridSize_x+1; localx++)
+		{
+			for (localy = 0; localy <= localGridSize_y+1; localy++)
+			{
+				if(fabs(u_old[localx][localy])>3)
+				{
+					fprintf(stderr,"modWrn i:%d (%d,%d)(%d,%d) v:%lf\n",i,gridPos_x,gridPos_y,localx,localy,u_old[localx][localy]);
+				}
+			}
+		}
+		
+		
 		// 担当領域の値を計算
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
 			for (localy = 1; localy <= localGridSize_y; localy++)
 			{
 				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy] + u_old[localx + 1][localy] + u_old[localx][localy - 1] + u_old[localx][localy + 1]);
+				if(fabs(u_new[localx][localy])>3)
+				{
+					fprintf(stderr,"calWrn i:%d (%d,%d)(%d,%d) v:%lf=0.25*(%.5lf+%.5lf+%.5lf+%.5lf) \n",i,gridPos_x,gridPos_y,localx,localy,u_new[localx][localy],u_old[localx - 1][localy] , u_old[localx + 1][localy] , u_old[localx][localy - 1] , u_old[localx][localy + 1]);
+				}
 			}
 		}
 		// printf("rank:%d  i:%d\n", myrank, i);
@@ -158,7 +191,7 @@ int main(int argc, char *argv[])
 		//y方向の隣接領域を担当するプロセスに送るデータをバッファに入れる
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
-			yup_edge[localx - 1] = u_new[localx][gridSize_y];
+			yup_edge[localx - 1] = u_new[localx][localGridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
 
@@ -171,27 +204,82 @@ int main(int argc, char *argv[])
 
 		//隣接プロセスの端の領域をほかプロセスから受信
 		MPI_Status status_xup, status_xdown, status_yup, status_ydown;
-		MPI_Recv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &status_yup);
-		MPI_Recv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &status_ydown);
-		MPI_Recv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XUP, comm2d, &status_xup);
-		MPI_Recv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XDOWN, comm2d, &status_xdown);
+		if(yup!=MPI_PROC_NULL){MPI_Recv(yup_surr, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YUP, comm2d, &status_yup);}
+		if(ydown!=MPI_PROC_NULL){MPI_Recv(ydown_surr, localGridSize_x, MPI_DOUBLE, ydown, TAG_FROM_YDOWN, comm2d, &status_ydown);}
+		if(xup!=MPI_PROC_NULL){MPI_Recv(&(u_new[localGridSize_x + 1][1]), localGridSize_y, MPI_DOUBLE, xup, TAG_FROM_XUP, comm2d, &status_xup);}
+		if(xdown!=MPI_PROC_NULL){MPI_Recv(&(u_new[0][1]), localGridSize_y, MPI_DOUBLE, xdown, TAG_FROM_XDOWN, comm2d, &status_xdown);}
 
-		MPI_Wait(&req_xup, &status_xup);
-		MPI_Wait(&req_xdown, &status_xdown);
-		MPI_Wait(&req_yup, &status_yup);
-		MPI_Wait(&req_ydown, &status_ydown);
+		MPI_Wait(&req_xup, &status_toxup);
+		MPI_Wait(&req_xdown, &status_toxdown);
+		MPI_Wait(&req_yup, &status_toyup);
+		MPI_Wait(&req_ydown, &status_toydown);
+		int xupCount=-100;
+		int xdownCount=-100;
+		int yupCount=-100;
+		int ydownCount=-100;
+		int retxup= MPI_Get_count(&status_xup,MPI_DOUBLE,&xupCount);
+		int retxdown= MPI_Get_count(&status_xdown,MPI_DOUBLE,&xdownCount);
+		int retyup= MPI_Get_count(&status_yup,MPI_DOUBLE,&yupCount);
+		int retydown= MPI_Get_count(&status_ydown,MPI_DOUBLE,&ydownCount);
+		if(xupCount!=localGridSize_y&&xup!=MPI_PROC_NULL)
+		{
+			fprintf(stderr,"bufWrn i:%d r:%d (%d+1,%d) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_y,xupCount,status_xup.MPI_ERROR,retxup);
+		}
+		if(xdownCount!=localGridSize_y&&xdown!=MPI_PROC_NULL)
+		{
+			fprintf(stderr,"bufWrn i:%d r:%d (%d-1,%d) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_y,xdownCount,status_xdown.MPI_ERROR,retxdown);
+		}
+		if(yupCount!=localGridSize_x&&yup!=MPI_PROC_NULL)
+		{
+			fprintf(stderr,"bufWrn i:%d r:%d (%d,%d+1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,yupCount,status_yup.MPI_ERROR,retyup);
+		}
+		if(ydownCount!=localGridSize_x&&ydown!=MPI_PROC_NULL)
+		{
+			fprintf(stderr,"bufWrn i:%d r:%d (%d,%d-1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,ydownCount,status_ydown.MPI_ERROR,retydown);
+		}
 
 		//y方向の隣接領域から送られてきたデータをu_newに代入していく。
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
+			
 			u_new[localx][localGridSize_y + 1] = (yup != MPI_PROC_NULL) ? yup_surr[localx - 1] : 0;
 			u_new[localx][0] = (ydown != MPI_PROC_NULL) ? ydown_surr[localx - 1] : 0;
+			
+			if(fabs(u_new[localx][localGridSize_y + 1])>3)
+			{
+				fprintf(stderr,"bufinf i:%d r:%d (%d,%d+1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,yupCount,status_yup.MPI_ERROR,retyup);
+				fprintf(stderr,"comWrn i:%d (%d,%d) fromup lx:%d v:%lf\n",i,gridPos_x,gridPos_y,localx,u_new[localx][localGridSize_y + 1]);
+			}
+			if(fabs(u_new[localx][0])>3)
+			{
+				fprintf(stderr,"bufInf i:%d r:%d (%d,%d-1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,ydownCount,status_ydown.MPI_ERROR,retydown);
+				fprintf(stderr,"comWrn i:%d (%d,%d) fromdown lx:%d v:%lf\n",i,gridPos_x,gridPos_y,localx,u_new[localx][0]);
+			}
+			
+		}
+		for (localy = 1; localy <= localGridSize_y; localy++)
+		{
+			
+			if(fabs(u_new[localGridSize_x+1][localy])>3)
+			{
+				fprintf(stderr,"bufinf i:%d r:%d (%d+1,%d) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_y,xupCount,status_xup.MPI_ERROR,retxup);
+				fprintf(stderr,"comWrn i:%d (%d,%d) fromup ly:%d v:%lf\n",i,gridPos_x,gridPos_y,localy,u_new[localGridSize_x+1][localy]);
+			}
+			if(fabs(u_new[0][localy])>3)
+			{
+				fprintf(stderr,"bufinf i:%d r:%d (%d-1,%d) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_y,xdownCount,status_xdown.MPI_ERROR,retxdown);
+				fprintf(stderr,"comWrn i:%d (%d,%d) fromdown ly:%d v:%lf\n",i,gridPos_x,gridPos_y,localy,u_new[0][localy]);
+			}
+			
 		}
 
 		//データコピーの代わりに、書き込む領域を入れ替える
 		double **temp = u_old;
 		u_old = u_new;
 		u_new = temp;
+
+		//Debug
+		MPI_Barrier(MPI_COMM_WORLD);
 	}
 
 	double localsum = 0;
@@ -199,14 +287,24 @@ int main(int argc, char *argv[])
 	{
 		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
+			
+			if(fabs(u_new[localx][localy])>3)
+			{
+					fprintf(stderr,"fv Wrn i:%d (%d,%d)(%d,%d) v:%lf \n",i,gridPos_x,gridPos_y,localx,localy,u_new[localx][localy]);
+			}
+			
 			localsum += u_new[localx][localy]-u_old[localx][localy];
 		}
+	}
+	if(fabs(localsum)>100)
+	{
+		fprintf(stderr,"ls Wrn w(%d,%d)ls:%lf\n",gridPos_x,gridPos_y,localsum);
 	}
 	double sum = -100;
 	MPI_Reduce(&localsum, &sum, 1, MPI_DOUBLE, MPI_SUM, 0, comm2d);
 	if (myrank == 0)
 	{
-		fprintf(stderr,"sum = %g\n", sum);
+		fprintf(stderr,"sum = %lf\n", sum);
 	}
 
 	MPI_Comm_free(&comm2d);
