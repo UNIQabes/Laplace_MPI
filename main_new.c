@@ -8,14 +8,14 @@
 /* square region */
 #define PI 3.1415927
 
-//#define XSIZE 256
-//#define YSIZE 256
-//#define NITER 10000
+#define XSIZE 256
+#define YSIZE 256
+#define NITER 10000
 
 
-#define XSIZE 64
-#define YSIZE 64
-#define NITER 10
+//#define XSIZE 64
+//#define YSIZE 64
+//#define NITER 10
 
 
 
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
 	}
 
 	// laplaceを解く--------------------------------------------------------
-	MPI_Barrier(MPI_COMM_WORLD);
+	//MPI_Barrier(MPI_COMM_WORLD);
 	double start = MPI_Wtime();
 
 	int xdown, xup, ydown, yup;
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 
 	//debug
 	//fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xstart,xend,ystart,yend, xup, xdown, yup, ydown);
-	MPI_Barrier(comm2d);
+	//MPI_Barrier(comm2d);
 
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
 	MPI_Status status_xup, status_xdown, status_yup, status_ydown;
@@ -161,6 +161,7 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < NITER; i++)
 	{
+		/*
 		for (localx = 0; localx <= localGridSize_x+1; localx++)
 		{
 			for (localy = 0; localy <= localGridSize_y+1; localy++)
@@ -171,6 +172,7 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+		*/
 		
 		
 		// 担当領域の値を計算
@@ -179,10 +181,12 @@ int main(int argc, char *argv[])
 			for (localy = 1; localy <= localGridSize_y; localy++)
 			{
 				u_new[localx][localy] = 0.25 * (u_old[localx - 1][localy] + u_old[localx + 1][localy] + u_old[localx][localy - 1] + u_old[localx][localy + 1]);
+				/*
 				if(fabs(u_new[localx][localy])>3)
 				{
 					fprintf(stderr,"calWrn i:%d (%d,%d)(%d,%d) v:%lf=0.25*(%.5lf+%.5lf+%.5lf+%.5lf) \n",i,gridPos_x,gridPos_y,localx,localy,u_new[localx][localy],u_old[localx - 1][localy] , u_old[localx + 1][localy] , u_old[localx][localy - 1] , u_old[localx][localy + 1]);
 				}
+				*/
 			}
 		}
 		// printf("rank:%d  i:%d\n", myrank, i);
@@ -213,6 +217,7 @@ int main(int argc, char *argv[])
 		MPI_Wait(&req_xdown, &status_toxdown);
 		MPI_Wait(&req_yup, &status_toyup);
 		MPI_Wait(&req_ydown, &status_toydown);
+		/*
 		int xupCount=-100;
 		int xdownCount=-100;
 		int yupCount=-100;
@@ -237,6 +242,7 @@ int main(int argc, char *argv[])
 		{
 			fprintf(stderr,"bufWrn i:%d r:%d (%d,%d-1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,ydownCount,status_ydown.MPI_ERROR,retydown);
 		}
+		*/
 
 		//y方向の隣接領域から送られてきたデータをu_newに代入していく。
 		for (localx = 1; localx <= localGridSize_x; localx++)
@@ -244,7 +250,7 @@ int main(int argc, char *argv[])
 			
 			u_new[localx][localGridSize_y + 1] = (yup != MPI_PROC_NULL) ? yup_surr[localx - 1] : 0;
 			u_new[localx][0] = (ydown != MPI_PROC_NULL) ? ydown_surr[localx - 1] : 0;
-			
+			/*
 			if(fabs(u_new[localx][localGridSize_y + 1])>3)
 			{
 				fprintf(stderr,"bufinf i:%d r:%d (%d,%d+1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,yupCount,status_yup.MPI_ERROR,retyup);
@@ -255,8 +261,10 @@ int main(int argc, char *argv[])
 				fprintf(stderr,"bufInf i:%d r:%d (%d,%d-1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,ydownCount,status_ydown.MPI_ERROR,retydown);
 				fprintf(stderr,"comWrn i:%d (%d,%d) fromdown lx:%d v:%lf\n",i,gridPos_x,gridPos_y,localx,u_new[localx][0]);
 			}
+			*/
 			
 		}
+		/*	
 		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
 			
@@ -271,7 +279,9 @@ int main(int argc, char *argv[])
 				fprintf(stderr,"comWrn i:%d (%d,%d) fromdown ly:%d v:%lf\n",i,gridPos_x,gridPos_y,localy,u_new[0][localy]);
 			}
 			
+			
 		}
+		*/
 
 		//データコピーの代わりに、書き込む領域を入れ替える
 		double **temp = u_old;
@@ -279,7 +289,7 @@ int main(int argc, char *argv[])
 		u_new = temp;
 
 		//Debug
-		MPI_Barrier(MPI_COMM_WORLD);
+		//MPI_Barrier(MPI_COMM_WORLD);
 	}
 
 	double localsum = 0;
@@ -287,19 +297,21 @@ int main(int argc, char *argv[])
 	{
 		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
-			
+			/*
 			if(fabs(u_new[localx][localy])>3)
 			{
 					fprintf(stderr,"fv Wrn i:%d (%d,%d)(%d,%d) v:%lf \n",i,gridPos_x,gridPos_y,localx,localy,u_new[localx][localy]);
 			}
-			
+			*/
 			localsum += u_new[localx][localy]-u_old[localx][localy];
 		}
 	}
+	/*
 	if(fabs(localsum)>100)
 	{
 		fprintf(stderr,"ls Wrn w(%d,%d)ls:%lf\n",gridPos_x,gridPos_y,localsum);
 	}
+	*/
 	double sum = -100;
 	MPI_Reduce(&localsum, &sum, 1, MPI_DOUBLE, MPI_SUM, 0, comm2d);
 	if (myrank == 0)
