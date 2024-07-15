@@ -1,5 +1,10 @@
-bin/main_old : main_old.c
-	mpicc -lm main_old.c  -o bin/main_old
+MPICC = mpicc
+CFLAGS = -lm -std=gnu99
 
-bin/main_new : main_new.c
-	mpicc -lm main_new.c  -o bin/main_new
+
+bin/%: %.c
+	${MPICC} ${CFLAGS} $< -o $@
+
+.PHONY:all
+
+all: bin/main_NIter bin/main_new bin/main_old
