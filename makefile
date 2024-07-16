@@ -7,4 +7,4 @@ bin/%: %.c
 
 .PHONY:all
 
-all: bin/main_NIter bin/main_new bin/main_old
+all: bin/main_LIter bin/main_new bin/main_old
