@@ -319,7 +319,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"sum = %lf\n", sum);
 	}
 
-	MPI_Comm_free(&comm2d);
+
+
+	
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	double end = MPI_Wtime();
@@ -328,6 +330,10 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"time = %g\n", end - start);
 		printf("%g", end - start);
 	}
+
+	//debug logを出力
+
+	MPI_Comm_free(&comm2d);
 
 	MPI_Finalize();
 	return (0);
