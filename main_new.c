@@ -10,14 +10,14 @@
 /* square region */
 #define PI 3.1415927
 
-//#define XSIZE 256
-//#define YSIZE 256
-//#define NITER 10000
+#define XSIZE 256
+#define YSIZE 256
+#define NITER 10000
 
 
-#define XSIZE 64
-#define YSIZE 64
-#define NITER 10
+//#define XSIZE 64
+//#define YSIZE 64
+//#define NITER 10
 
 
 

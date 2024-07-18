@@ -9,14 +9,14 @@
 /* square region */
 #define PI 3.1415927
 
-//#define XSIZE 256
-//#define YSIZE 256
-//#define NITER 10000
+#define XSIZE 256
+#define YSIZE 256
+#define NITER 10000
 
 
-#define XSIZE 64
-#define YSIZE 64
-#define NITER 10
+//#define XSIZE 64
+//#define YSIZE 64
+//#define NITER 2
 
 #define LOCALITER 2
 
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 	int yupEdge=LOCALITER+localGridSize_y-1;
 
 	//debug
-	fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d localArySize_x:%d localArySize_y:%d localGridSize_x:%d localGridSize_y:%d\n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xdownEdge,xupEdge,ydownEdge,yupEdge,localArySize_x, localArySize_y,localGridSize_x,localGridSize_y);
+	//fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d localArySize_x:%d localArySize_y:%d localGridSize_x:%d localGridSize_y:%d\n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xdownEdge,xupEdge,ydownEdge,yupEdge,localArySize_x, localArySize_y,localGridSize_x,localGridSize_y);
 	MPI_Barrier(comm2d);
 
 
@@ -316,6 +316,8 @@ int main(int argc, char *argv[])
 			
 		}
 
+		//debug
+		//fprintf(stderr,"%d/(%d,%d) before xdyd:%lf xdyu:%lf xuyd:%lf xuyu:%lf\n",i,gridPos_x,gridPos_y,u_new[1][1],u_new[1][localArySize_y-2],u_new[localArySize_x-2][1],u_new[localArySize_x-2][localArySize_y-2]);
 		
 		//深さexchHaloDepthのHaloを交換する
 		for(int exchHaloDepth=1;exchHaloDepth<=LOCALITER;exchHaloDepth++)
@@ -329,10 +331,19 @@ int main(int argc, char *argv[])
 			//斜めにあるプロセスからは、x方向で深さexchHaloDepthのHaloを交換する
 			//斜にある各プロセスと交換するHaloのサイズ
 			int diagHaloNum=LOCALITER-(exchHaloDepth);
-			MPI_Isend(&(u_new[xdownEdge+(exchHaloDepth-1)][0]),diagHaloNum,MPI_DOUBLE,xdyd,BASE_FROM_XUPYUP+exchHaloDepth,comm2d,&req_xdyd);
-			MPI_Isend(&(u_new[xdownEdge+(exchHaloDepth-1)][localArySize_y-diagHaloNum]),diagHaloNum,MPI_DOUBLE,xdyu,BASE_FROM_XUPYDOWN+exchHaloDepth,comm2d,&req_xdyu);
-			MPI_Isend(&(u_new[xupEdge-(exchHaloDepth-1)][0]),diagHaloNum,MPI_DOUBLE,xuyd,BASE_FROM_XDOWNYUP+exchHaloDepth,comm2d,&req_xuyd);
-			MPI_Isend(&(u_new[xupEdge-(exchHaloDepth-1)][localArySize_y-diagHaloNum]),diagHaloNum,MPI_DOUBLE,xuyu,BASE_FROM_XDOWNYDOWN+exchHaloDepth,comm2d,&req_xuyu);
+			MPI_Isend(&(u_new[xdownEdge+(exchHaloDepth-1)][ydownEdge]),diagHaloNum,MPI_DOUBLE,xdyd,BASE_FROM_XUPYUP+exchHaloDepth,comm2d,&req_xdyd);
+			MPI_Isend(&(u_new[xdownEdge+(exchHaloDepth-1)][yupEdge-(diagHaloNum-1)]),diagHaloNum,MPI_DOUBLE,xdyu,BASE_FROM_XUPYDOWN+exchHaloDepth,comm2d,&req_xdyu);
+			MPI_Isend(&(u_new[xupEdge-(exchHaloDepth-1)][ydownEdge]),diagHaloNum,MPI_DOUBLE,xuyd,BASE_FROM_XDOWNYUP+exchHaloDepth,comm2d,&req_xuyd);
+			MPI_Isend(&(u_new[xupEdge-(exchHaloDepth-1)][yupEdge-(diagHaloNum-1)]),diagHaloNum,MPI_DOUBLE,xuyu,BASE_FROM_XDOWNYDOWN+exchHaloDepth,comm2d,&req_xuyu);
+			/*
+			if(diagHaloNum==1)
+			{
+				if(xdyd!=MPI_PROC_NULL){fprintf(stderr,"(%d,%d)sentToxdyd:%lf\n",gridPos_x,gridPos_y,u_new[xdownEdge+(exchHaloDepth-1)][ydownEdge]);}
+				if(xdyu!=MPI_PROC_NULL){fprintf(stderr,"(%d,%d)sentToxdyu:%lf\n",gridPos_x,gridPos_y,u_new[xdownEdge+(exchHaloDepth-1)][yupEdge-(diagHaloNum-1)]);}
+				if(xuyd!=MPI_PROC_NULL){fprintf(stderr,"(%d,%d)sentToxuyd:%lf\n",gridPos_x,gridPos_y,u_new[xupEdge-(exchHaloDepth-1)][ydownEdge]);}
+				if(xuyu!=MPI_PROC_NULL){fprintf(stderr,"(%d,%d)sentToxuyu:%lf\n",gridPos_x,gridPos_y,u_new[xupEdge-(exchHaloDepth-1)][yupEdge-(diagHaloNum-1)]);}
+			}
+			*/
 
 			
 			//隣接プロセスの端の領域をほかプロセスから受信
@@ -342,11 +353,13 @@ int main(int argc, char *argv[])
 			if(xup!=MPI_PROC_NULL){MPI_Recv(&(u_new[xupEdge+exchHaloDepth][ydownEdge]), localGridSize_y, MPI_DOUBLE, xup, BASE_FROM_XUP+exchHaloDepth, comm2d, &status_xup);}
 			if(xdown!=MPI_PROC_NULL){MPI_Recv(&(u_new[xdownEdge-exchHaloDepth][ydownEdge]), localGridSize_y, MPI_DOUBLE, xdown, BASE_FROM_XDOWN+exchHaloDepth, comm2d, &status_xdown);}
 			
+			
 			//斜めにあるプロセスの端の領域をほかプロセスから受信
 			if(xdyd!=MPI_PROC_NULL){MPI_Recv(&(u_new[xdownEdge-exchHaloDepth][ydownEdge-diagHaloNum]),diagHaloNum,MPI_DOUBLE,xdyd,BASE_FROM_XDOWNYDOWN+exchHaloDepth,comm2d,&status_xdyd);}
 			if(xdyu!=MPI_PROC_NULL){MPI_Recv(&(u_new[xdownEdge-exchHaloDepth][yupEdge+1]),diagHaloNum,MPI_DOUBLE,xdyu,BASE_FROM_XDOWNYUP+exchHaloDepth,comm2d,&status_xdyu);}
 			if(xuyd!=MPI_PROC_NULL){MPI_Recv(&(u_new[xupEdge+exchHaloDepth][ydownEdge-diagHaloNum]),diagHaloNum,MPI_DOUBLE,xuyd,BASE_FROM_XUPYDOWN+exchHaloDepth,comm2d,&status_xuyd);}
 			if(xuyu!=MPI_PROC_NULL){MPI_Recv(&(u_new[xupEdge+exchHaloDepth][yupEdge+1]),diagHaloNum,MPI_DOUBLE,xuyu,BASE_FROM_XUPYUP+exchHaloDepth,comm2d,&status_xuyu);}
+			
 
 			MPI_Wait(&req_xup, &status_toxup);
 			MPI_Wait(&req_xdown, &status_toxdown);
@@ -360,7 +373,7 @@ int main(int argc, char *argv[])
 
 
 
-
+			//debug
 			int xupCount=-100,xdownCount=-100,yupCount=-100,ydownCount=-100;
 			int xuyuCount=-100,xdyuCount=-100,xuydCount=-100,xdydCount=-100;
 			int retxup= MPI_Get_count(&status_xup,MPI_DOUBLE,&xupCount);
@@ -408,6 +421,8 @@ int main(int argc, char *argv[])
 				fprintf(stderr,"bufWrn i:%d r:%d (%d,%d-1) as:%d ac:%d ERR:%d ERR:%d\n",i,myrank,gridPos_x,gridPos_y,localGridSize_x,ydownCount,status_ydown.MPI_ERROR,retydown);
 			}
 		}
+		//debug
+		//fprintf(stderr,"%d/(%d,%d) after xdyd:%lf xdyu:%lf xuyd:%lf xuyu:%lf\n",i,gridPos_x,gridPos_y,u_new[1][1],u_new[1][localArySize_y-2],u_new[localArySize_x-2][1],u_new[localArySize_x-2][localArySize_y-2]);
 
 		//y方向の隣接領域から送られてきたデータをu_newに代入していく。
 		for(int EdgeOrHaloDepth=1;EdgeOrHaloDepth<=LOCALITER;EdgeOrHaloDepth++)
@@ -458,23 +473,64 @@ int main(int argc, char *argv[])
 	char fileName_str[256];
 	sprintf(fileName_str, "log/Liter(%d,%d)_%d/(%d,%d)_datafile.txt", gridNum_x,gridNum_y,NITER,gridPos_x,gridPos_y);
 	FILE * dataFile_pointer= fopen(fileName_str, "w") ;
-	fprintf(dataFile_pointer,"x\\y:");
-	for(int localy=	ydownEdge;localy<=yupEdge;localy++)
+	fprintf(dataFile_pointer,"   x\\y:");
+	for(int localy=	0;localy<localArySize_y;localy++)
 	{
 		int worldy = localy - ydownEdge+ystart;
-		fprintf(dataFile_pointer,"%7d|",worldy);
+		if(ydownEdge<=localy&&localy<=yupEdge)
+		{
+			fprintf(dataFile_pointer,"%7d|",worldy);
+		}
+		else 
+		{
+			fprintf(dataFile_pointer,"(%5d)|",worldy);
+		}
+		
 	}
 	fprintf(dataFile_pointer,"\n");
-	for(int localx=xdownEdge;localx<=xupEdge;localx++)
+	for(int localx=0;localx<localArySize_x;localx++)
 	{
 		int worldx=localx-xdownEdge+xstart;
-		fprintf(dataFile_pointer,"%3d:",worldx);
-		for(int localy=	ydownEdge;localy<=yupEdge;localy++)
+		if(xdownEdge<=localx&&localx<=xupEdge)
+		{
+			fprintf(dataFile_pointer,"%6d:",worldx);
+		}
+		else
+		{
+			fprintf(dataFile_pointer,"(%+4d):",worldx);
+		}
+
+		for(int localy=	0;localy<localArySize_y;localy++)
 		{
 			fprintf(dataFile_pointer,"%+1.4lf|",u_old[localx][localy]);
 		}
+
+		if(xdownEdge<=localx&&localx<=xupEdge)
+		{
+			fprintf(dataFile_pointer,"%6d:",worldx);
+		}
+		else
+		{
+			fprintf(dataFile_pointer,"(%+4d):",worldx);
+		}
 		fprintf(dataFile_pointer,"\n");
 	}
+
+	fprintf(dataFile_pointer,"   x\\y:");
+	for(int localy=	0;localy<localArySize_y;localy++)
+	{
+		int worldy = localy - ydownEdge+ystart;
+		if(ydownEdge<=localy&&localy<=yupEdge)
+		{
+			fprintf(dataFile_pointer,"%7d|",worldy);
+		}
+		else 
+		{
+			fprintf(dataFile_pointer,"(%5d)|",worldy);
+		}
+		
+	}
+	fprintf(dataFile_pointer,"\n");
 	fclose(dataFile_pointer);
 
 	MPI_Finalize();
