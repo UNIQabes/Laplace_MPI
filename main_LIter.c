@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
+#include <sys/stat.h>
 /* square region */
 #define PI 3.1415927
 
@@ -15,7 +16,7 @@
 
 #define XSIZE 64
 #define YSIZE 64
-#define NITER 4
+#define NITER 10
 
 #define LOCALITER 2
 
@@ -265,7 +266,7 @@ int main(int argc, char *argv[])
 			
 			
 			int lxFirst=(gridPos_x>0)?xdownEdge-calHaloDepth:xdownEdge;
-			int lxLast=(gridPos_x<gridSize_x-1)?xupEdge+calHaloDepth:xupEdge;
+			int lxLast=(gridPos_x<gridNum_x-1)?xupEdge+calHaloDepth:xupEdge;
 			
 
 			// 担当領域の値と、次のループの計算に使う周辺領域の値の計算を行う
@@ -283,10 +284,10 @@ int main(int argc, char *argv[])
 				}
 				//プロセス自体の位置が端だった場合、それより外側は計算しない。
 				int lyFirst=(gridPos_y>0)?ydownEdge-thisX_HaloYDepth:ydownEdge;
-				int lyLast=(gridPos_y<gridSize_y-1)?yupEdge+thisX_HaloYDepth:yupEdge;
+				int lyLast=(gridPos_y<gridNum_y-1)?yupEdge+thisX_HaloYDepth:yupEdge;
 
 				//debug
-				fprintf(stderr,"i:%d/%d (%d,%d) lx:%d ly%d~%d\n",i,calHaloDepth,gridPos_x,gridPos_y,localx,lyFirst,lyLast);
+				//fprintf(stderr,"i:%d/%d (%d,%d) lx:%d ly%d~%d\n",i,calHaloDepth,gridPos_x,gridPos_y,localx,lyFirst,lyLast);
 
 				for (localy = lyFirst; localy <=lyLast; localy++)
 				{
@@ -449,6 +450,32 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"time = %g\n", end - start);
 		printf("%g", end - start);
 	}
+
+	//debug
+	char dirName_str[256];
+	sprintf(dirName_str, "log/Liter(%d,%d)_%d", gridNum_x,gridNum_y,NITER);
+	mkdir(dirName_str, 0777);
+	char fileName_str[256];
+	sprintf(fileName_str, "log/Liter(%d,%d)_%d/(%d,%d)_datafile.txt", gridNum_x,gridNum_y,NITER,gridPos_x,gridPos_y);
+	FILE * dataFile_pointer= fopen(fileName_str, "w") ;
+	fprintf(dataFile_pointer,"x\\y:");
+	for(int localy=	ydownEdge;localy<=yupEdge;localy++)
+	{
+		int worldy = localy - ydownEdge+ystart;
+		fprintf(dataFile_pointer,"%7d|",worldy);
+	}
+	fprintf(dataFile_pointer,"\n");
+	for(int localx=xdownEdge;localx<=xupEdge;localx++)
+	{
+		int worldx=localx-xdownEdge+xstart;
+		fprintf(dataFile_pointer,"%3d:",worldx);
+		for(int localy=	ydownEdge;localy<=yupEdge;localy++)
+		{
+			fprintf(dataFile_pointer,"%+1.4lf|",u_old[localx][localy]);
+		}
+		fprintf(dataFile_pointer,"\n");
+	}
+	fclose(dataFile_pointer);
 
 	MPI_Finalize();
 	return (0);

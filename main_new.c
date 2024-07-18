@@ -5,17 +5,19 @@
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
+#include<string.h>
+#include <sys/stat.h>
 /* square region */
 #define PI 3.1415927
 
-#define XSIZE 256
-#define YSIZE 256
-#define NITER 10000
+//#define XSIZE 256
+//#define YSIZE 256
+//#define NITER 10000
 
 
-//#define XSIZE 64
-//#define YSIZE 64
-//#define NITER 10
+#define XSIZE 64
+#define YSIZE 64
+#define NITER 10
 
 
 
@@ -128,6 +130,7 @@ int main(int argc, char *argv[])
 			else
 			{
 				u_old[localx][localy] = sin((double)worldx / XSIZE * PI) + cos((double)worldy / YSIZE * PI);
+				u_new[localx][localy] = u_old[localx][localy];
 			}
 		}
 	}
@@ -332,6 +335,30 @@ int main(int argc, char *argv[])
 	}
 
 	//debug logを出力
+	char dirName_str[256];
+	sprintf(dirName_str, "log/new(%d,%d)_%d", gridNum_x,gridNum_y,NITER);
+	mkdir(dirName_str, 0777);
+	char fileName_str[256];
+	sprintf(fileName_str, "log/new(%d,%d)_%d/(%d,%d)_datafile.txt", gridNum_x,gridNum_y,NITER,gridPos_x,gridPos_y);
+	FILE * dataFile_pointer= fopen(fileName_str, "w") ;
+	fprintf(dataFile_pointer,"x\\y:");
+	for(int localy=	1;localy<localGridSize_y+1;localy++)
+	{
+		int worldy = localy - 1 + gridSize_y * (gridPos_y);
+		fprintf(dataFile_pointer,"%7d|",worldy);
+	}
+	fprintf(dataFile_pointer,"\n");
+	for(int localx=1;localx<localGridSize_x+1;localx++)
+	{
+		int worldx=localx-1+gridSize_x*gridPos_x;
+		fprintf(dataFile_pointer,"%3d:",worldx);
+		for(int localy=1;localy<localGridSize_y+1;localy++)
+		{
+			fprintf(dataFile_pointer,"%+1.4lf|",u_old[localx][localy]);
+		}
+		fprintf(dataFile_pointer,"\n");
+	}
+	fclose(dataFile_pointer);
 
 	MPI_Comm_free(&comm2d);
 

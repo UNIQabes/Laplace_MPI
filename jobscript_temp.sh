@@ -9,12 +9,13 @@ echo "old 4*4"
 echo "old 4*4" 1>&2
 mpirun -map-by ppr:8:socket --bind-to core -n 16  bin/main_old
 echo
+COMMENTOUT
 
 echo "new 2*2"
 echo "new 2*2" 1>&2
 mpirun -map-by ppr:4:socket --bind-to core -n 4 bin/main_new
 echo
-COMMENTOUT
+
 
 echo "new 3*3"
 echo "new 3*3" 1>&2
