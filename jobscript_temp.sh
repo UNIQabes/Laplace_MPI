@@ -4,6 +4,13 @@
 #SBATCH -o report/%J_out_test.txt
 #SBATCH -e report/%J_err_test.txt
 
+
+echo "LIter 2*2"
+echo "LIter 2*2" 1>&2
+mpirun -map-by ppr:4:socket --bind-to core -n 4 bin/main_LIter
+echo
+
+
 : << COMMENTOUT
 echo "old 4*4"
 echo "old 4*4" 1>&2

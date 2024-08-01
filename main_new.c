@@ -33,8 +33,20 @@
 
 int main(int argc, char *argv[])
 {
-	int debugcount_cal=0;
-	int debugcount_ary=0;
+	double cal_Time=0;
+	double haloExc_Time=0;
+	double bufToAry_Time=0;
+	double aryToBuf_Time=0;
+
+	double cal_StartTime=0;
+	double haloExc_StartTime=0;
+	double bufToAry_StartTime=0;
+	double aryToBuf_StartTime=0;
+
+	double cal_EndTime=0;
+	double haloExc_EndTime=0;
+	double bufToAry_EndTime=0;
+	double aryToBuf_EndTime=0;
 
 	int localx,localy,i;
 
@@ -177,7 +189,7 @@ int main(int argc, char *argv[])
 		}
 		*/
 		
-		
+		cal_StartTime=MPI_Wtime();
 		// 担当領域の値を計算
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
@@ -193,7 +205,11 @@ int main(int argc, char *argv[])
 			}
 		}
 		// printf("rank:%d  i:%d\n", myrank, i);
+		cal_EndTime=MPI_Wtime();
+		cal_Time+=cal_EndTime-cal_StartTime;
 
+
+		aryToBuf_StartTime=MPI_Wtime();
 		// 自分の担当領域の境界部分を隣接プロセスと同期
 		//y方向の隣接領域を担当するプロセスに送るデータをバッファに入れる
 		for (localx = 1; localx <= localGridSize_x; localx++)
@@ -201,7 +217,10 @@ int main(int argc, char *argv[])
 			yup_edge[localx - 1] = u_new[localx][localGridSize_y];
 			ydown_edge[localx - 1] = u_new[localx][1];
 		}
+		aryToBuf_EndTime=MPI_Wtime();
+		aryToBuf_Time+=aryToBuf_EndTime-aryToBuf_StartTime;
 
+		haloExc_StartTime=MPI_Wtime();
 		//2次元分割なので、上下左右のプロセスと同期する。
 		//端の領域を隣接プロセスに送信
 		MPI_Isend(yup_edge, localGridSize_x, MPI_DOUBLE, yup, TAG_FROM_YDOWN, comm2d, &req_yup);
@@ -220,6 +239,10 @@ int main(int argc, char *argv[])
 		MPI_Wait(&req_xdown, &status_toxdown);
 		MPI_Wait(&req_yup, &status_toyup);
 		MPI_Wait(&req_ydown, &status_toydown);
+		
+		haloExc_EndTime=MPI_Wtime();
+		haloExc_Time+=haloExc_EndTime-haloExc_StartTime;
+
 		/*
 		int xupCount=-100;
 		int xdownCount=-100;
@@ -247,6 +270,7 @@ int main(int argc, char *argv[])
 		}
 		*/
 
+		bufToAry_StartTime=MPI_Wtime();
 		//y方向の隣接領域から送られてきたデータをu_newに代入していく。
 		for (localx = 1; localx <= localGridSize_x; localx++)
 		{
@@ -267,6 +291,8 @@ int main(int argc, char *argv[])
 			*/
 			
 		}
+		bufToAry_EndTime=MPI_Wtime();
+		bufToAry_Time+=bufToAry_EndTime-bufToAry_StartTime;
 		/*	
 		for (localy = 1; localy <= localGridSize_y; localy++)
 		{
@@ -330,8 +356,14 @@ int main(int argc, char *argv[])
 	double end = MPI_Wtime();
 	if (myrank == 0)
 	{
-		fprintf(stderr,"time = %g\n", end - start);
-		printf("%g", end - start);
+		double rest_Time=end - start-cal_Time-bufToAry_Time-haloExc_Time-aryToBuf_Time;
+		fprintf(stderr,"time = %lf\n", end - start);
+		fprintf(stderr,"calTime = %lf\n", cal_Time);
+		fprintf(stderr,"bufToAryTime = %lf\n", bufToAry_Time);
+		fprintf(stderr,"HaloExTime = %lf\n", haloExc_Time);
+		fprintf(stderr,"AryToBufTime = %lf\n", aryToBuf_Time);
+		fprintf(stderr,"RestTime = %lf\n", rest_Time);
+		printf("%lf,%lf,%lf,%lf,%lf,%lf\n", end - start,cal_Time,bufToAry_Time,haloExc_Time,aryToBuf_Time,rest_Time);
 	}
 
 	//debug logを出力

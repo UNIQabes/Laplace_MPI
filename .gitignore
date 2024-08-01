@@ -3,3 +3,4 @@ bin/
 log/
 .vscode/
 report/
+*.log

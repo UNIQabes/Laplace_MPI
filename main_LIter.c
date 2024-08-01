@@ -7,6 +7,8 @@
 #include <math.h>
 #include <mpi.h>
 #include <sys/stat.h>
+#include "tlog.h"
+
 /* square region */
 #define PI 3.1415927
 
@@ -15,11 +17,15 @@
 #define NITER 10000
 
 
+
 //#define XSIZE 64
 //#define YSIZE 64
 //#define NITER 4
 
-#define LOCALITER 4
+
+#ifndef LOCALITER
+#define LOCALITER 2
+#endif
 
 #define TAG_FROM_XUP 800
 #define TAG_FROM_XDOWN 801
@@ -47,8 +53,38 @@
 
 #define DIM 2
 
+
+#define  CALCURATIONSTART_EVENTNUM 10
+#define  CALCURATIONEND_EVENTNUM 11
+
+#define  HALOEXCHANGESTART_EVENTNUM 12
+#define  HALOEXCHANGEEND_EVENTNUM 13
+
+#define  MEMCPYSTART_EVENTNUM 14
+#define  MEMCPYEND_EVENTNUM 15
+
+#define  PACKINGSATRT_EVENTNUM 16
+#define  PACKINGEND_EVENTNUM 17
+
+
 int main(int argc, char *argv[])
 {
+	double cal_Time=0;
+	double haloExc_Time=0;
+	double bufToAry_Time=0;
+	double aryToBuf_Time=0;
+
+	double cal_StartTime=0;
+	double haloExc_StartTime=0;
+	double bufToAry_StartTime=0;
+	double aryToBuf_StartTime=0;
+
+	double cal_EndTime=0;
+	double haloExc_EndTime=0;
+	double bufToAry_EndTime=0;
+	double aryToBuf_EndTime=0;
+	
+
 	int localx,localy,i;
 
 	int namelen;
@@ -58,6 +94,10 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 	MPI_Get_processor_name(processor_name, &namelen);
+
+	//tlog_initialize();
+	//tlog_log_filename("log_Liter.log");
+
 
 	// 各パラメーターの決定--------------------------------------
 	//  x,y軸方向に幾つ分割されているか
@@ -157,10 +197,6 @@ int main(int argc, char *argv[])
 	int xupEdge=LOCALITER+localGridSize_x-1;
 	int yupEdge=LOCALITER+localGridSize_y-1;
 
-	//debug
-	//fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d localArySize_x:%d localArySize_y:%d localGridSize_x:%d localGridSize_y:%d\n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xdownEdge,xupEdge,ydownEdge,yupEdge,localArySize_x, localArySize_y,localGridSize_x,localGridSize_y);
-	MPI_Barrier(comm2d);
-
 
 	// uoldとunewのメモリ領域確保 + u_oldの初期化 ----------------------------
 	//  u_oldとu_newは自分の担当領域+その隣接領域の値を保持する。
@@ -171,6 +207,7 @@ int main(int argc, char *argv[])
 	//localx,localyはu_old,u_newのインデックス
 	for (localx = 0; localx < localArySize_x; localx++)
 	{
+		
 
 		u_old[localx] = (double *)malloc(sizeof(double) * (localArySize_y));
 		u_new[localx] = (double *)malloc(sizeof(double) * (localArySize_y));
@@ -221,7 +258,6 @@ int main(int argc, char *argv[])
 	MPI_Wait(&req_ydTxu, &sta_ydTxu_S);
 	MPI_Wait(&req_ydTxd, &sta_ydTxd_S);
 
-	//fprintf(stderr,"xdown:%d, xup:%d, ydown:%d, yup:%d, xdyd:%d, xdyu:%d, xuyd:%d, xuyu:%d\n",xdown, xup, ydown, yup,xdyd, xdyu, xuyd, xuyu);
 
 
 	MPI_Request req_xup, req_xdown, req_yup, req_ydown;
@@ -276,11 +312,7 @@ int main(int argc, char *argv[])
 		yup_surr_Buf[i]=(double *)malloc(sizeof(double)*localGridSize_x);
 		ydown_surr_Buf[i]=(double *)malloc(sizeof(double)*localGridSize_x);
 	}
-	//debug
-	MPI_Barrier(comm2d);
-	//fprintf(stderr,"rank:%d pos(%d,%d) gridsize(%d,%d) xrange:%d-%d yrange:%d-%d xup:%d xdown:%d yup:%d ydown:%d \n", myrank, gridPos_x, gridPos_y, localGridSize_x, localGridSize_y,xstart,xend,ystart,yend, xup, xdown, yup, ydown);
-
-
+	
 	for (int i = 0; i < NITER; i+=LOCALITER)
 	{
 		
@@ -289,7 +321,8 @@ int main(int argc, char *argv[])
 
 		for(int calHaloDepth=localIterNum-1;calHaloDepth>=0;calHaloDepth--)
 		{
-			
+			cal_StartTime=MPI_Wtime();
+			//tlog_log(CALCURATIONSTART_EVENTNUM);
 			//このループで計算するべきHaloの深さがcalHaloDepth
 			//今回計算する点のxの範囲を求める
 			int lxFirst=(gridPos_x>0)?xdownEdge-calHaloDepth:xdownEdge;
@@ -322,15 +355,21 @@ int main(int argc, char *argv[])
 			double **temp=u_new;
 			u_new=u_old;
 			u_old=temp;
+			//tlog_log(CALCURATIONEND_EVENTNUM);
+			cal_EndTime=MPI_Wtime();
+			cal_Time+=cal_EndTime-cal_StartTime;
 		}
 		double **temp2=u_new;
 		u_new=u_old;
 		u_old=temp2;
 
+		aryToBuf_StartTime=MPI_Wtime();
+		//tlog_log(PACKINGSATRT_EVENTNUM);
 		int diagEdgeCopy_StartBufIndex=0;
 		//斜め、隣接している領域を担当するプロセスに送るデータをバッファに送る
 		for (int exchEdgeDepth=1;exchEdgeDepth<=LOCALITER;exchEdgeDepth++)
 		{
+
 			int yEdgeCopy_StartBufIndex=(exchEdgeDepth-1)*localGridSize_x;
 			//y方向の隣接領域を担当するプロセスに送るデータをバッファに入れる
 			for(int localx=xdownEdge;localx<=xupEdge;localx++)
@@ -346,19 +385,6 @@ int main(int argc, char *argv[])
 			memcpy(&(xdownEdge_ValBuf[xEdgeCopy_StartBufIndex]), &(u_new[xdownEdge+(exchEdgeDepth-1)][ydownEdge]), sizeof(double)*localGridSize_y);
 			
 			
-			//debug
-			for(int localy=ydownEdge;localy<=yupEdge;localy++)
-			{
-				int xEdgeCopy_BufIndex=xEdgeCopy_StartBufIndex+localy-ydownEdge;
-				if(xupEdge_ValBuf[xEdgeCopy_BufIndex]!=u_new[xupEdge-(exchEdgeDepth-1)][localy])
-				{
-					fprintf(stderr,"ffff\n");
-				}
-				if(xdownEdge_ValBuf[xEdgeCopy_BufIndex]!=u_new[xdownEdge+(exchEdgeDepth-1)][localy])
-				{
-					fprintf(stderr,"ssss\n");
-				}	
-			}
 			
 			
 
@@ -370,7 +396,12 @@ int main(int argc, char *argv[])
 			memcpy(&(xuyuEdge_ValBuf[diagEdgeCopy_StartBufIndex]),&(u_new[xupEdge-(exchEdgeDepth-1)][yupEdge-(diagEdgeCopy_CopyValNum-1)]),sizeof(double)*diagEdgeCopy_CopyValNum);
 			diagEdgeCopy_StartBufIndex+=diagEdgeCopy_CopyValNum;
 		}
+		//tlog_log(PACKINGEND_EVENTNUM);
+		aryToBuf_EndTime=MPI_Wtime();
+		aryToBuf_Time+=aryToBuf_EndTime-aryToBuf_StartTime;
 
+		haloExc_StartTime=MPI_Wtime();
+		//tlog_log(HALOEXCHANGESTART_EVENTNUM);
 		//2次元分割なので、上下左右のプロセスと同期する。
 		//上下左右の端の領域を隣接プロセスに送信
 		MPI_Request sendToXdown_Request,sendToXup_Request,sendToYdown_Request,sendToYup_Request;
@@ -411,10 +442,12 @@ int main(int argc, char *argv[])
 		MPI_Wait(&sendToXdyu_Request, &sendToXdyu_Status);
 		MPI_Wait(&sendToXuyd_Request, &sendToXuyd_Status);
 		MPI_Wait(&sendToXuyu_Request, &sendToXuyu_Status);
+		//tlog_log(HALOEXCHANGEEND_EVENTNUM);
+		haloExc_EndTime=MPI_Wtime();
+		haloExc_Time+=haloExc_EndTime-haloExc_StartTime;
 
-		
-		
-
+		bufToAry_StartTime=MPI_Wtime();
+		//tlog_log(MEMCPYSTART_EVENTNUM);
 		int diagHaloCopy_StartBufIndex=0;
 		for(int EdgeOrHaloDepth=1;EdgeOrHaloDepth<=LOCALITER;EdgeOrHaloDepth++)
 		{
@@ -440,6 +473,10 @@ int main(int argc, char *argv[])
 			if(xuyu!=MPI_PROC_NULL){memcpy(&(u_new[xupEdge+(EdgeOrHaloDepth)][yupEdge+1]),&(xuyuHalo_ValBuf[diagHaloCopy_StartBufIndex]),sizeof(double)*diagHaloCopy_CopyValNum);}
 			diagHaloCopy_StartBufIndex+=diagHaloCopy_CopyValNum;
 		}
+		//tlog_log(MEMCPYEND_EVENTNUM);
+		bufToAry_EndTime=MPI_Wtime();
+		bufToAry_Time+=bufToAry_EndTime-bufToAry_StartTime;
+		
 		//データコピーの代わりに、書き込む領域を入れ替える
 		double **temp = u_old;
 		u_old = u_new;
@@ -468,10 +505,19 @@ int main(int argc, char *argv[])
 	double end = MPI_Wtime();
 	if (myrank == 0)
 	{
-		fprintf(stderr,"time = %g\n", end - start);
-		printf("%g", end - start);
+		double rest_Time=end - start-cal_Time-bufToAry_Time-haloExc_Time-aryToBuf_Time;
+		fprintf(stderr,"Liter = %d\n", LOCALITER);
+		fprintf(stderr,"time = %lf\n", end - start);
+		//fprintf(stderr,"calTime = %lf\n", cal_Time);
+		//fprintf(stderr,"bufToAryTime = %lf\n", bufToAry_Time);
+		//fprintf(stderr,"HaloExTime = %lf\n", haloExc_Time);
+		//fprintf(stderr,"AryToBufTime = %lf\n", aryToBuf_Time);
+		//fprintf(stderr,"RestTime = %lf\n", rest_Time);
+		printf("%lf,%lf,%lf,%lf,%lf,%lf\n", end - start,cal_Time,bufToAry_Time,haloExc_Time,aryToBuf_Time,rest_Time);
+		
 	}
 
+	/*
 	//debug
 	char dirName_str[256];
 	sprintf(dirName_str, "log/Liter(%d,%d)_%d", gridNum_x,gridNum_y,NITER);
@@ -538,6 +584,8 @@ int main(int argc, char *argv[])
 	}
 	fprintf(dataFile_pointer,"\n");
 	fclose(dataFile_pointer);
+	*/
+	//tlog_finalize();
 
 	MPI_Finalize();
 	return (0);
